@@ -23,6 +23,9 @@ set(reblue_backend_only
 
 # The runtime DXC shader linker has no Vulkan counterpart.
 set(reblue_d3d12_only
+    gpu/vr_hud.cpp
+    vr/bdvr_plume.cpp
+    vr/bdvr_xr.cpp
     gpu/shaders/dxc_link.cpp
     gpu/shaders/dxc_link.h
     gpu/shaders/shader_linker.cpp

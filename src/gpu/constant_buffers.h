@@ -53,8 +53,14 @@ struct SharedConstants {
   float blitHalfPixelOffsetY{}; // c21.y, byte 340
   u32 _pad_c21_z{};             // c21.z, byte 344
   u32 _pad_c21_w{};             // c21.w, byte 348
+  // VR: the clip-space transform applied after the projection by every vertex
+  // shader that reads the camera constants (c24..c35), one per eye (VrEye,
+  // b4 space4, picks), rows of the column-form matrix. Identity when the draw's
+  // camera is not a world camera. See vr/bdvr.h.
+  float vrClip[2][16]{{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1},
+                      {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}}; // c22..c29, bytes 352..479
 };
-static_assert(sizeof(SharedConstants) == 352);
+static_assert(sizeof(SharedConstants) == 480);
 
 // memory stays valid until ResetFrame().
 struct ConstantAllocation {

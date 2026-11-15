@@ -195,6 +195,10 @@ bool BuildPipelineLayout(VideoState &s) {
   // occlusion count draw, unused by every normal draw.
   layout_builder.addRootDescriptor(
       0, 5, plume::RenderRootDescriptorType::UNORDERED_ACCESS);
+  // VR eye index (b4, space4), read by every camera vertex shader: root
+  // descriptor 4, bound once per command list (vr/bdvr.h BindEye).
+  layout_builder.addRootDescriptor(
+      4, 4, plume::RenderRootDescriptorType::CONSTANT_BUFFER);
 
   // register(b3, space4) in the copy helpers, PIXEL-only. 4 dwords:
   // [0] primary SRV slot, [1] secondary SRV slot, [2]/[3] per-pass floats.

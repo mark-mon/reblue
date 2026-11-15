@@ -9,6 +9,7 @@
  *            See LICENSE file in the project root for full license text.
  */
 #include <algorithm>
+#include "vr/bdvr.h"
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -544,6 +545,7 @@ u32 D3DDevice_Resolve_hook(u32 /*device_guest*/, u32 Flags, u32 /*pSourceRect*/,
     }
     return 0;
   }
+  bdvr::TraceMark("Resolve", pDestTexture, dst->width, dst->height);
   bd::gpu::Video::TrackResolveSource(Flags, dst, DestLevel, DestSliceOrFace);
   bd::gpu::Video::ResolveRtToTexture(dst);
   return 0;

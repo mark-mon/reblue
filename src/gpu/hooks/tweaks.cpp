@@ -9,6 +9,7 @@
  * @license   BSD 3-Clause License
  *            See LICENSE file in the project root for full license text.
  */
+#include "vr/bdvr.h"
 #include "gpu/hooks/tweaks.h"
 
 #include <algorithm>
@@ -109,7 +110,11 @@ bool bdSceneTilingSuppressHook() { return true; }
 
 void bdSceneRenderScaleHook(PPCRegister &r31) {
   bd::engine::VisualRender render(r31.u32);
-  const f32 rate = static_cast<f32>(bd::gpu::Settings::Get().SuperSampling());
+  f32 rate = static_cast<f32>(bd::gpu::Settings::Get().SuperSampling());
+  // VR: its own scene scale (vr_config supersampling, default 1): the render
+  // size is already the headset's.
+  if (const int vr_ss = bdvr::SuperSampling(); vr_ss > 0)
+    rate = static_cast<f32>(vr_ss);
   if (render.RenderRate() != rate)
     render.SetRenderRate(rate);
   render.SetFSAA(bd::gpu::Settings::Get().MSAA() > 0);

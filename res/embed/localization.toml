@@ -22,6 +22,9 @@ no.us = "@game:warn_mes/WARN0003_SA2|No"
 paused.us = "Paused"
 
 [opt]
+vr_stereo.us = "Stereo"
+vr_mono.us = "Mono"
+vr_theater.us = "Theater"
 slow.us = "@game:cfg_str/CFG_S0003|Slow"
 normal.us = "@game:cfg_str/CFG_S0004|Normal"
 fast.us = "@game:cfg_str/CFG_S0005|Fast"
@@ -220,6 +223,7 @@ restart_note_ingame.it = "Accessibile solo dal menù principale (Richiede il ria
 restart_note_ingame.po = "Apenas no menu principal (Requer reinicialização)"
 
 [menu.header]
+vr.us = "VR"
 mods.us = "Mods"
 mods.de = "Mods"
 mods.es = "Mods"
@@ -710,6 +714,21 @@ cursor_auto_hide.label.es = "Auto-Ocultar cursor"
 cursor_auto_hide.label.fr = "Disparition auto du curseur"
 cursor_auto_hide.label.it = "Nascondimento cursore"
 cursor_auto_hide.label.po = "Auto-Ocultar Cursor"
+[settings.vr]
+mode.label.us = "VR Mode"
+resolution.label.us = "VR Resolution"
+supersampling.label.us = "VR Supersampling"
+world_scale.label.us = "World Scale (units per metre)"
+keep_pitch.label.us = "Keep Camera Pitch"
+hud.label.us = "HUD on Its Own Panel"
+hud_follow.label.us = "HUD Follows Head"
+hud_distance.label.us = "HUD Distance"
+hud_width.label.us = "HUD Width"
+hud_height.label.us = "HUD Height"
+screen_distance.label.us = "Screen Distance"
+screen_width.label.us = "Screen Width"
+cull_widen.label.us = "Culling Margin"
+
 [settings.graphics]
 quality_preset.label.us = "Quality Preset"
 quality_preset.label.de = "Qualitätsprofil"

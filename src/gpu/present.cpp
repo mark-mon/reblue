@@ -10,6 +10,8 @@
  *            See LICENSE file in the project root for full license text.
  */
 #include "gpu/frame.h"
+#include "vr/bdvr.h"
+#include "gpu/vr_hud.h"
 
 #include <atomic>
 #include <chrono>
@@ -33,7 +35,9 @@ namespace {
 
 void ApplyVsync(VideoState &s) {
   if (s.swap_chain) {
-    s.swap_chain->setVsyncEnabled(Settings::Get().Vsync());
+    // VR: the headset paces the game (PaceFrame), not the desktop monitor.
+    s.swap_chain->setVsyncEnabled(Settings::Get().Vsync() &&
+                                  bdvr::PacingFps() == 0);
   }
 }
 
@@ -43,6 +47,8 @@ void PaceFrame(bool idle = false) {
   using Clock = std::chrono::steady_clock;
   static Clock::time_point next{};
   i32 fps = bd::engine::Settings::Get().FPSLimit();
+  if (const int vr_fps = bdvr::PacingFps(); vr_fps > 0 && (fps <= 0 || fps > vr_fps))
+    fps = vr_fps;
   if (bd::engine::SofdecPlayer::Playing())
     fps = 30;
   if (idle && (fps <= 0 || fps > kIdleFPS))
@@ -287,6 +293,17 @@ void Video::Present(GuestTexture *frontBuffer) {
   const u32 cur = s.frame.load(std::memory_order_relaxed);
   s.command_lists[cur]->end();
   s.command_list_open = false;
+  // VR: the eyes get the world without the HUD when it was captured apart.
+  plume::RenderTexture *vr_eye = rt->texture, *vr_hud_black = nullptr,
+                       *vr_hud_white = nullptr, *vr_world = nullptr;
+  u32 vr_w = rt->width, vr_h = rt->height, vr_hw = 0, vr_hh = 0;
+  if (vrhud::Images(&vr_world, &vr_hud_black, &vr_hud_white, &vr_hw, &vr_hh)) {
+    vr_eye = vr_world;
+    vr_w = vr_hw;
+    vr_h = vr_hh;
+  }
+  bdvr::BeforeFrameSubmit(s.command_lists[cur].get(), vr_eye, vr_w, vr_h,
+                          s.guest_gamma);
 
   const plume::RenderCommandList *lists[] = {s.command_lists[cur].get()};
   plume::RenderCommandSemaphore *waits[] = {s.acquire_semaphores[cur].get()};
@@ -298,6 +315,8 @@ void Video::Present(GuestTexture *frontBuffer) {
                                  s.fences[cur].get());
   }
   s.command_list_submitted[cur] = true;
+  bdvr::AfterFrameSubmit(vr_eye, vr_w, vr_h, s.guest_gamma, vr_hud_black,
+                         vr_hud_white);
   ApplyVsync(s);
   {
     BD_CPU_ZONE("PresentSwap");

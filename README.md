@@ -10,6 +10,10 @@
 > This project is useless unless you have a legal backup of the ISO images from the Global release (US/EU, Asia/JP support coming soon).
 
 
+> [!NOTE]
+> **This fork adds VR (OpenXR, PC headsets).** See [VR.md](VR.md) for installing and using the VR build. Everything
+> below is upstream re:Blue's README.
+
 # re:Blue
 
 re:Blue rebuilds Blue Dragon as a native application through static recompilation, translating the original code into something your machine runs directly rather than emulating a console around it. That opens the door to things an emulator cannot reach: higher frame rates, modern resolutions, and real mod support.

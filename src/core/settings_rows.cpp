@@ -23,6 +23,7 @@
 #include "engine/engine.h"
 #include "gpu/gpu.h"
 #include "ui/ui.h"
+#include "vr/bdvr.h"
 
 namespace bd {
 namespace {
@@ -277,6 +278,21 @@ constexpr SettingOption kPresetOpts[] = {
     {.text = "Custom",
      .num = 4,
      .key = gpu::ToString(gpu::QualityPreset::Custom)}};
+
+// VR (vr/bdvr.h): rows shown only while a VR session runs, saved to the VR
+// build's vr_config.txt on every change.
+bool VrHidden() { return !bdvr::Active(); }
+template <bdvr::Setting S> constexpr SettingBinding VrBinding() {
+  return {.get = [] { return bdvr::SettingGet(S); },
+          .set = [](double v) { return bdvr::SettingSet(S, v); }};
+}
+constexpr SettingOption kVrMode[] = {
+    {.text = "Stereo", .num = 0, .key = "opt.vr_stereo"},
+    {.text = "Mono", .num = 1, .key = "opt.vr_mono"},
+    {.text = "Theater", .num = 2, .key = "opt.vr_theater"}};
+constexpr SettingOption kVrSupersampling[] = {
+    {.text = "Off", .num = 1, .key = "opt.off"},
+    {.text = "2x", .num = 2}};
 
 template <size_t N> constexpr int OptCount(const SettingOption (&)[N]) {
   return static_cast<int>(N);
@@ -594,6 +610,109 @@ constexpr SettingRow kDisplaySettings[] = {
              [](double v) { return gpu::Settings::Get().SetVsync(v != 0.0); }},
      .options = kOnOff,
      .count = OptCount(kOnOff)},
+    {.label = "settings.vr.mode.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::Mode>(),
+     .options = kVrMode,
+     .count = OptCount(kVrMode),
+     .hidden = VrHidden},
+    {.label = "settings.vr.resolution.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::Resolution>(),
+     .kind = SettingKind::Slider,
+     .restart = true,
+     .smin = 50.0,
+     .smax = 200.0,
+     .sstep = 10.0,
+     .sfmt = "%.0f%%",
+     .hidden = VrHidden},
+    {.label = "settings.vr.supersampling.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::Supersampling>(),
+     .options = kVrSupersampling,
+     .count = OptCount(kVrSupersampling),
+     .hidden = VrHidden},
+    {.label = "settings.vr.world_scale.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::WorldScale>(),
+     .kind = SettingKind::Slider,
+     .smin = 4.0,
+     .smax = 40.0,
+     .sstep = 1.0,
+     .sfmt = "%.0f",
+     .hidden = VrHidden},
+    {.label = "settings.vr.keep_pitch.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::KeepPitch>(),
+     .options = kOnOff,
+     .count = OptCount(kOnOff),
+     .hidden = VrHidden},
+    {.label = "settings.vr.hud.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::Hud>(),
+     .options = kOnOff,
+     .count = OptCount(kOnOff),
+     .hidden = VrHidden},
+    {.label = "settings.vr.hud_follow.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::HudFollow>(),
+     .options = kOnOff,
+     .count = OptCount(kOnOff),
+     .hidden = VrHidden},
+    {.label = "settings.vr.hud_distance.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::HudDistance>(),
+     .kind = SettingKind::Slider,
+     .smin = 0.5,
+     .smax = 4.0,
+     .sstep = 0.05,
+     .sfmt = "%.2f m",
+     .hidden = VrHidden},
+    {.label = "settings.vr.hud_width.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::HudWidth>(),
+     .kind = SettingKind::Slider,
+     .smin = 0.4,
+     .smax = 4.0,
+     .sstep = 0.05,
+     .sfmt = "%.2f m",
+     .hidden = VrHidden},
+    {.label = "settings.vr.hud_height.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::HudHeight>(),
+     .kind = SettingKind::Slider,
+     .smin = -1.0,
+     .smax = 1.0,
+     .sstep = 0.05,
+     .sfmt = "%.2f m",
+     .hidden = VrHidden},
+    {.label = "settings.vr.screen_distance.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::ScreenDistance>(),
+     .kind = SettingKind::Slider,
+     .smin = 1.0,
+     .smax = 10.0,
+     .sstep = 0.1,
+     .sfmt = "%.1f m",
+     .hidden = VrHidden},
+    {.label = "settings.vr.screen_width.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::ScreenWidth>(),
+     .kind = SettingKind::Slider,
+     .smin = 1.0,
+     .smax = 10.0,
+     .sstep = 0.1,
+     .sfmt = "%.1f m",
+     .hidden = VrHidden},
+    {.label = "settings.vr.cull_widen.label",
+     .group = "menu.header.vr",
+     .binding = VrBinding<bdvr::Setting::CullWiden>(),
+     .kind = SettingKind::Slider,
+     .smin = 1.0,
+     .smax = 3.0,
+     .sstep = 0.1,
+     .sfmt = "%.1f",
+     .hidden = VrHidden},
 };
 
 constexpr SettingRow kGraphicsSettings[] = {

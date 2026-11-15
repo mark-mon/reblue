@@ -20,6 +20,7 @@
 #include "core/logging.h"
 #include "gpu/device.h"
 #include "gpu/settings.h"
+#include "vr/bdvr.h"
 
 namespace bd::gpu {
 
@@ -29,6 +30,9 @@ std::atomic<u64> g_render_size{0};
 std::atomic<u32> g_generation{0};
 
 bool ConfiguredResolution(u32 &w, u32 &h) {
+  // VR: the headset's eye size (x resolution %), filled edge to edge.
+  if (bdvr::RenderSize(&w, &h))
+    return true;
   i32 cfg_w = 0;
   i32 cfg_h = 0;
   if (!rex::graphics::video_mode_util::TryGetResolutionPresetFromCVar(cfg_w,
@@ -104,6 +108,9 @@ double Output::RenderDensity() {
 }
 
 double Output::ConfiguredAspect() {
+  u32 vr_w = 0, vr_h = 0;
+  if (bdvr::RenderSize(&vr_w, &vr_h))
+    return 0.0;
   switch (static_cast<AspectMode>(Settings::Get().AspectRatio())) {
   case AspectMode::Standard:
     return 4.0 / 3.0;
@@ -158,6 +165,10 @@ float Output::DesignScaleY() {
 }
 
 float Output::DesignOverscanX() {
+  // VR: the 2D layer stays inside its centred 16:9 rectangle (the HUD panel).
+  u32 vr_w = 0, vr_h = 0;
+  if (bdvr::RenderSize(&vr_w, &vr_h))
+    return 0.0f;
   const double ar = ProjectionAspect();
   if (!DesignFitActive() || ar <= kDesignCanvasAspect)
     return 0.0f;
@@ -166,6 +177,10 @@ float Output::DesignOverscanX() {
 }
 
 float Output::DesignOverscanY() {
+  // VR: the 2D layer stays inside its centred 16:9 rectangle (the HUD panel).
+  u32 vr_w = 0, vr_h = 0;
+  if (bdvr::RenderSize(&vr_w, &vr_h))
+    return 0.0f;
   const double ar = ProjectionAspect();
   if (!DesignFitActive() || ar >= kDesignCanvasAspect)
     return 0.0f;

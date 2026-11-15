@@ -9,6 +9,7 @@
  *            See LICENSE file in the project root for full license text.
  */
 #include <cstring>
+#include "vr/bdvr.h"
 
 #include <rex/hook.h>
 #include <rex/runtime.h>
@@ -91,6 +92,8 @@ void D3DDevice_SetRenderTarget_hook(
   // RT[0].
   if (RenderTargetIndex != 0)
     return;
+  bdvr::TraceMark("SetRenderTarget", pRenderTarget.guest_address(),
+                  surface ? surface->width : 0, surface ? surface->height : 0);
 
   auto &s = bd::gpu::state();
 

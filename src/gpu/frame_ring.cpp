@@ -30,6 +30,7 @@
 #include "gpu/native_texture_mirror.h"
 #include "gpu/physical_buffers.h"
 #include "gpu/surface_registry.h"
+#include "vr/bdvr.h"
 
 namespace bd::gpu {
 
@@ -41,7 +42,7 @@ void BeginCommandList(VideoState &s) {
   if (!s.pipeline_layout)
     return;
   const u32 cur = s.frame.load(std::memory_order_relaxed);
-  s.command_list = s.command_lists[cur].get();
+  s.command_list = bdvr::WrapCommands(s.command_lists[cur].get());
   s.draw_framebuffer_bound = false;
   s.last_resolved_dst = nullptr;
   s.command_list->begin();
@@ -56,6 +57,9 @@ void BeginCommandList(VideoState &s) {
     s.null_texture_barriers_submitted = true;
   }
   s.command_list->setGraphicsPipelineLayout(s.pipeline_layout.get());
+#if defined(REBLUE_D3D12)
+  bdvr::BindEye(s.command_list);
+#endif
   s.command_list->setGraphicsDescriptorSet(s.texture_descriptor_set.get(), 0);
   s.command_list->setGraphicsDescriptorSet(s.texture_descriptor_set.get(), 1);
   s.command_list->setGraphicsDescriptorSet(s.texture_descriptor_set.get(), 2);

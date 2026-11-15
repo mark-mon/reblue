@@ -12,6 +12,7 @@
  *            See LICENSE file in the project root for full license text.
  */
 #include <cstring>
+#include "vr/bdvr.h"
 
 #include <rex/hook.h>
 #include <rex/ppc.h>
@@ -38,6 +39,7 @@ namespace {
 u32 D3DDevice_Clear_hook(u32 /*device*/, u32 /*count*/, u32 /*rects*/,
                          u32 flags, u32 color, f64 z, u32 /*z_gpr_slot*/,
                          u32 stencil, u32 /*edram_clear*/) {
+  bdvr::TraceMark("Clear", flags, color);
   bd::gpu::Video::Clear(flags, color, float(z), stencil);
   return 0;
 }

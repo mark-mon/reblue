@@ -8,6 +8,7 @@
  *            See LICENSE file in the project root for full license text.
  */
 #include "engine/frame_interp.h"
+#include "vr/bdvr.h"
 
 #include <algorithm>
 #include <atomic>
@@ -2953,7 +2954,9 @@ void ServeShaderEye() {
 REX_EXTERN(__imp__bdRenderViewSubmit);
 REX_HOOK_RAW(bdRenderViewSubmit) {
   t_renderViewObj = bd::mem::try_load<u32>(ctx.r3.u32 + kRenderViewObj);
+  bdvr::TraceMark("RenderViewSubmit begin", ctx.r3.u32, t_renderViewObj);
   __imp__bdRenderViewSubmit(ctx, base);
+  bdvr::TraceMark("RenderViewSubmit end");
   t_renderViewObj = 0;
 }
 
@@ -3097,12 +3100,17 @@ void ServeCameraMatrices(PPCContext &ctx) {
 REX_EXTERN(__imp__bdBuildViewMatrix);
 REX_HOOK_RAW(bdBuildViewMatrix) {
   BD_CPU_ZONE("bdBuildViewMatrix");
+  const u32 view_va = ctx.r4.u32;
   if (bd::engine::InterpolationActive()) {
     if (ctx.r3.u32 && !ctx.r4.u32 && !ctx.r5.u32)
       ServeWorldMatrix(ctx);
     else if (ctx.r4.u32)
       ServeCameraMatrices(ctx);
   }
+  // VR: the camera as the draws will see it (after interpolation / mouse look).
+  if (ctx.r4.u32 && ctx.r5.u32 && bd::engine::IsRenderThread())
+    bdvr::OnCamera(view_va, bd::mem::try_at<const u8>(ctx.r4.u32),
+                   bd::mem::try_at<const u8>(ctx.r5.u32));
   __imp__bdBuildViewMatrix(ctx, base);
 }
 
@@ -3327,6 +3335,31 @@ REX_HOOK_RAW(bdFrameSubmitAndDebugHUD) {
   g_drawTickDue = bd::engine::TickDue();
   bd::engine::PublishRenderClock();
   __imp__bdFrameSubmitAndDebugHUD(ctx, base);
+}
+
+// VR dev trace: frame structure marks.
+REX_EXTERN(__imp__bdCameraRenderSetup);
+REX_HOOK_RAW(bdCameraRenderSetup) {
+  bdvr::TraceMark("CameraRenderSetup begin", ctx.r3.u32);
+  bdvr::CameraSetup(true);
+  __imp__bdCameraRenderSetup(ctx, base);
+  bdvr::CameraSetup(false);
+  bdvr::TraceMark("CameraRenderSetup end");
+}
+REX_EXTERN(__imp__bdRenderOverlayEffects);
+REX_HOOK_RAW(bdRenderOverlayEffects) {
+  bdvr::TraceMark("RenderOverlayEffects begin", ctx.r3.u32);
+  __imp__bdRenderOverlayEffects(ctx, base);
+  bdvr::TraceMark("RenderOverlayEffects end");
+}
+
+// VR: one render frame starts (bdRenderStep is the render thread's loop).
+REX_EXTERN(__imp__bdRenderFrame);
+REX_HOOK_RAW(bdRenderFrame) {
+  bdvr::OnRenderFrameBegin();
+  bdvr::TraceMark("RenderFrame begin", ctx.r3.u32);
+  __imp__bdRenderFrame(ctx, base);
+  bdvr::TraceMark("RenderFrame end");
 }
 
 REX_EXTERN(__imp__bdRenderStep);

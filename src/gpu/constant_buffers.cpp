@@ -6,6 +6,7 @@
  *            See LICENSE file in the project root for full license text.
  */
 #include "gpu/constant_buffers.h"
+#include "vr/bdvr.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -425,6 +426,12 @@ ConstantAllocation UploadSharedConstants(u32 device_guest) {
       vs.vertex_declaration ? vs.vertex_declaration->sintTexcoords : 0u;
 
   s.shared.shadowPcfScale = s.shadowPcfScale;
+
+  bdvr::ClipForDraw(device_guest ? bd::mem::at<const u8>(
+                                       device_guest +
+                                       offsetof(D3DDevice, vsFloatConstants))
+                                 : nullptr,
+                    s.shared.vrClip);
 
   // Viewport extent, not the render target's: the NDC->pixel mapping this
   // cancels is the viewport's. +x/-y = half a pixel right and down.

@@ -100,8 +100,14 @@ std::optional<InstallConfig> ReadRecordFile(const fs::path &path,
     BD_WARN("Install record {} unreadable: {}", path.string(), e.what());
     return std::nullopt;
   }
-  if (connector == InstallConnector::kPortableFile)
-    cfg.install_root = path.parent_path();
+  if (connector == InstallConnector::kPortableFile) {
+    // VR builds ship in a folder inside an install: a relative install_root
+    // ("..") is taken from the record's folder. Anything else: the exe's folder.
+    const fs::path rel = cfg.install_root;
+    cfg.install_root = (!rel.empty() && rel.is_relative())
+                           ? (path.parent_path() / rel).lexically_normal()
+                           : path.parent_path();
+  }
   return Finish(std::move(cfg));
 }
 

@@ -9,6 +9,7 @@
  *            See LICENSE file in the project root for full license text.
  */
 #include "gpu/device.h"
+#include "vr/bdvr.h"
 
 #include <algorithm>
 #include <atomic>
@@ -355,6 +356,10 @@ bool Video::CreateHostDevice(rex::ui::Window *window) {
       s.acquire_semaphores[i] = s.device->createCommandSemaphore();
     }
     s.command_list = s.command_lists[0].get(); // recording alias -> slot 0
+#if defined(REBLUE_D3D12)
+    bdvr::InitFromPlume(s.device.get(), s.queue.get());
+    Output::Recompute(); // VR: render at the headset's eye size
+#endif
     [[maybe_unused]] const bool dred_breadcrumbs = PrepareDredCommandObjects();
 
     const bool upload_caps = s.device->getCapabilities().gpuUploadHeap;

@@ -17,6 +17,7 @@
 #include <rex/types.h>
 
 #include "engine/config.h"
+#include "vr/bdvr.h"
 #include "engine/field_camera.h"
 #include "engine/frame_clock.h"
 #include "engine/frame_interp.h"
@@ -310,4 +311,10 @@ REX_HOOK_RAW(bdFieldCameraStickUpdate) {
       bd::engine::FieldCamera(camera).StickActivity();
   __imp__bdFieldCameraStickUpdate(ctx, base);
   bd::engine::MouseLook(camera, activityBefore);
+  // VR dev: the field camera's eye and look target (game units), logged now and then (world scale).
+  if (auto *cam = bd::mem::try_at<const bd::engine::GameCamera_t>(camera)) {
+    const float e[3] = {cam->eye[0], cam->eye[1], cam->eye[2]};
+    const float t[3] = {cam->lookTarget[0], cam->lookTarget[1], cam->lookTarget[2]};
+    bdvr::NoteFieldCamera(e, t);
+  }
 }

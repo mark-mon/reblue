@@ -1,0 +1,109 @@
+diff --git a/XenosRecomp/shader_recompiler.cpp b/XenosRecomp/shader_recompiler.cpp
+index feaa90b..5371e54 100644
+--- a/XenosRecomp/shader_recompiler.cpp
++++ b/XenosRecomp/shader_recompiler.cpp
+@@ -951,6 +951,28 @@ void ShaderRecompiler::recompile(const AluInstruction& instr)
+             out += ')';
+ 
+         out += ";\n";
++
++    #ifdef REBLUE_RECOMP
++        // VR: oPos written as a plain copy of a temp (max(rN, rN), all lanes): re-aim it right here and put the
++        // re-aimed position back into rN, so the screen-space coordinates the shader derives from rN afterwards
++        // (water reflection / refraction lookups) follow the eye. Otherwise the epilogue re-aims oPos.
++        if (!isPixelShader && exportRegister == "oPos" && vectorWriteMask == 0xF && !instr.vectorSaturate &&
++            (instr.vectorOpcode == AluVectorOpcode::Max || instr.vectorOpcode == AluVectorOpcode::MaxA) &&
++            instr.src1Select && instr.src2Select && !instr.src1Negate && !instr.src2Negate &&
++            (instr.src1Register & 0xC0) == 0 && instr.src1Register == instr.src2Register &&
++            instr.src1Swizzle == 0 && instr.src2Swizzle == 0)
++        {
++            bool vrCamera = false;
++            for (const auto& [reg, info] : float4Constants)
++                vrCamera |= reg >= 24 && reg < 36;
++            if (vrCamera)
++            {
++                indent();
++                println("oPos = vrClip(oPos); r{} = oPos; vrClipped = true;", instr.src1Register & 0x3F);
++                vrClipInline = true;
++            }
++        }
++    #endif
+     }
+ 
+ #ifdef REBLUE_RECOMP
+@@ -1397,6 +1419,10 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
+     }
+ #endif
+ 
++#ifdef REBLUE_RECOMP
++    if (!isPixelShader)
++        out += "#define vrClip(p) (p)\n";
++#endif
+     out += "\n#else\n\n";
+ 
+     println("cbuffer {}ShaderConstants : register(b{}, space4)", isPixelShader ? "Pixel" : "Vertex", isPixelShader ? 1 : 0);
+@@ -1459,6 +1485,8 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
+     }
+ 
+ #ifdef REBLUE_RECOMP
++    if (!isPixelShader)
++        out += "\tfloat4 g_VrClipRows[8] : packoffset(c22);\n";
+     // Mirror the SPIR-V fallback: packoffset slots for any unnamed sampler index 0..15.
+     for (uint32_t r = 0; r < 16; r++)
+     {
+@@ -1477,6 +1505,16 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
+     out += "\tDEFINE_SHARED_CONSTANTS();\n";
+     out += "};\n\n";
+ 
++#ifdef REBLUE_RECOMP
++    if (!isPixelShader)
++    {
++        // VR eye of this pass (0 left / mono, 1 right): flipped between the two runs of a stereo frame.
++        out += "cbuffer VrEyeConstants : register(b4, space4)\n{\n\tuint g_VrEye;\n};\n\n";
++        out += "float4 vrClip(float4 p)\n{\n\tuint e = g_VrEye == 1u ? 4u : 0u;\n";
++        out += "\treturn float4(dot(g_VrClipRows[e], p), dot(g_VrClipRows[e + 1], p), dot(g_VrClipRows[e + 2], p), dot(g_VrClipRows[e + 3], p));\n}\n\n";
++    }
++#endif
++
+     out += "#endif\n";
+ 
+     for (uint32_t i = 0; i < constantTableContainer->constantTable.constants; i++)
+@@ -1736,6 +1774,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
+     #elif defined(REBLUE_RECOMP)
+         // Always define SV_Position so a skipped position-write block doesn't leave it undef.
+         out += "\toPos = 0.0;\n";
++        out += "\tbool vrClipped = false;\n";
+     #endif
+ 
+         for (auto& [usage, usageIndex] : INTERPOLATORS)
+@@ -2318,6 +2357,18 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
+                 }
+                 else
+                 {
++                #ifdef REBLUE_RECOMP
++                    // VR: a shader that reads the camera constants (c24..c35: view, projection, view-projection)
++                    // re-aims its position with the per-draw clip transform (identity unless a world camera).
++                    bool vrCamera = false;
++                    for (const auto& [reg, info] : float4Constants)
++                        vrCamera |= reg >= 24 && reg < 36;
++                    if (vrCamera)
++                    {
++                        indent();
++                        out += vrClipInline ? "\tif (!vrClipped) oPos = vrClip(oPos);\n" : "\toPos = vrClip(oPos);\n";
++                    }
++                #endif
+                 #ifdef UNLEASHED_RECOMP
+                     if (!hasMtxProjection)
+                 #endif
+diff --git a/XenosRecomp/shader_recompiler.h b/XenosRecomp/shader_recompiler.h
+index 791def7..b666534 100644
+--- a/XenosRecomp/shader_recompiler.h
++++ b/XenosRecomp/shader_recompiler.h
+@@ -29,6 +29,7 @@ struct ShaderRecompiler : StringBuffer
+     std::unordered_map<uint32_t, VertexElement> vertexElements;
+     std::unordered_map<uint32_t, std::string> interpolators;
+     std::unordered_map<uint32_t, const ConstantInfo*> float4Constants;
++    bool vrClipInline = false; // VR: oPos re-aimed where it is written (and its source register with it)
+     std::unordered_map<uint32_t, const char*> boolConstants;
+     std::unordered_map<uint32_t, const char*> samplers;
+     std::unordered_map<uint32_t, uint32_t> ifEndLabels;
