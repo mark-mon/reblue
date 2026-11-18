@@ -318,9 +318,28 @@ struct State {
 
 bool Check(XrResult r, const char* what) {
   if (XR_SUCCEEDED(r)) return true;
+  // The same failure over and over (a runtime that stopped working) is logged once, then counted.
+  static std::mutex m;
+  static const char* last_what = nullptr;
+  static XrResult last_r = XR_SUCCESS;
+  static uint64_t repeats = 0;
+  static auto last_log = std::chrono::steady_clock::now();
+  std::lock_guard<std::mutex> lock(m);
+  const auto now = std::chrono::steady_clock::now();
+  if (what == last_what && r == last_r) {
+    ++repeats;
+    if (now - last_log < std::chrono::seconds(5)) return false;
+  }
   char text[XR_MAX_RESULT_STRING_SIZE] = {};
   if (x.xrResultToString && s.instance) x.xrResultToString(s.instance, r, text);
-  Log("%s failed: %d %s", what, int(r), text);
+  if (repeats)
+    Log("%s failed: %d %s (and %llu more times)", what, int(r), text, (unsigned long long)repeats);
+  else
+    Log("%s failed: %d %s", what, int(r), text);
+  last_what = what;
+  last_r = r;
+  repeats = 0;
+  last_log = now;
   return false;
 }
 
@@ -835,9 +854,14 @@ void FrameLoop() {
         Log("headset refresh %.1f Hz", hz);
       }
     }
-    std::lock_guard<std::mutex> lock(s.chain_mutex);
+    std::unique_lock<std::mutex> lock(s.chain_mutex);
     XrFrameBeginInfo bi{XR_TYPE_FRAME_BEGIN_INFO};
-    if (!Check(x.xrBeginFrame(s.session, &bi), "xrBeginFrame")) continue;
+    if (!Check(x.xrBeginFrame(s.session, &bi), "xrBeginFrame")) {
+      // Not in a tight loop holding the chain lock: the game's frame submit takes it too.
+      lock.unlock();
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      continue;
+    }
     XrCompositionLayerQuad quad{XR_TYPE_COMPOSITION_LAYER_QUAD};
     XrCompositionLayerProjection proj{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
     XrCompositionLayerProjectionView pv[2] = {{XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW},

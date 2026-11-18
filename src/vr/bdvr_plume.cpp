@@ -114,6 +114,7 @@ struct GlueState {
   std::unique_ptr<RenderBuffer> eye_buffer;  // VrEye (b4): default heap, flipped by a GPU copy between eye passes
   std::unique_ptr<RenderBuffer> zero_buffer; // VrEye when VR is off: an upload buffer of zeros
   StereoCommandList proxy;
+  RenderCommandList* current = nullptr;  // the frame list being recorded (for GPU markers)
   bool stereo_frame = false;
   int lists_this_frame = 0;
   std::vector<D3D12_RESOURCE_BARRIER> restore;
@@ -231,10 +232,22 @@ bool RenderSize(uint32_t* width, uint32_t* height) {
 
 RenderCommandList* WrapCommands(RenderCommandList* list) {
   ++g.lists_this_frame;
+  g.current = list;
   g.stereo_frame = StereoActive() && g.eye_buffer != nullptr;
   if (!g.stereo_frame) return list;
   g.proxy.Open(list);
   return &g.proxy;
+}
+
+void GpuMarker(const char* what) {
+  auto* list = static_cast<D3D12CommandList*>(g.current);
+  if (list == nullptr || list->d3d == nullptr || what == nullptr) return;
+  // Shows in the DRED report re:Blue logs when the device is lost (breadcrumb contexts), and in PIX / RenderDoc.
+  wchar_t text[64];
+  size_t n = 0;
+  for (; what[n] && n + 1 < 64; ++n) text[n] = wchar_t(static_cast<unsigned char>(what[n]));
+  text[n] = 0;
+  list->d3d->SetMarker(0, text, UINT((n + 1) * sizeof(wchar_t)));
 }
 
 void BindEye(RenderCommandList* list) {
@@ -305,6 +318,7 @@ void ClipForDraw(const void*, float out[2][16]) {
 }
 plume::RenderCommandList* WrapCommands(plume::RenderCommandList* list) { return list; }
 void BindEye(plume::RenderCommandList*) {}
+void GpuMarker(const char*) {}
 void BeforeFrameSubmit(plume::RenderCommandList*, plume::RenderTexture*, uint32_t, uint32_t, float) {}
 void AfterFrameSubmit(plume::RenderTexture*, uint32_t, uint32_t, float, plume::RenderTexture*,
                       plume::RenderTexture*) {}

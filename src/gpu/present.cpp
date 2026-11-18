@@ -288,6 +288,7 @@ void Video::Present(GuestTexture *frontBuffer) {
   }
 
   BeginCommandList(s);
+  bdvr::GpuMarker("present pass");
   RecordPresentPass(s, rt, back, back_fb);
 
   const u32 cur = s.frame.load(std::memory_order_relaxed);

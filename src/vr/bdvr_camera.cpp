@@ -391,6 +391,7 @@ void FlushListStats() {
 }
 
 void TraceMark(const char* what, uint32_t a, uint32_t b, uint32_t c) {
+  GpuMarker(what);
   if (!TraceFrame()) return;
   Log("mark %-22s %08X %08X %08X | draws since: world %u other %u", what, a, b, c, g_mark_world, g_mark_other);
   g_mark_world = g_mark_other = 0;

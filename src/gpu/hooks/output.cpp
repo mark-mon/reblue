@@ -580,6 +580,9 @@ REX_HOOK_RAW(bdRenderSubmitList) {
   // Nothing in the overlay lists is re-aimed: some of their draws (talk name tags, the composite quad) use shaders
   // that read c24.. with the scene camera's constants still loaded and would otherwise match the world camera.
   bdvr::InOverlayList(list_index >= 0);
+  static const char *const kListMarker[] = {"list 1A54", "list 1A64", "list 1A74"};
+  if (list_index >= 0 && list_index < 3)
+    bdvr::GpuMarker(kListMarker[list_index]);
   if (list_index == 0 && pin)
     LogCompositeNodes(ctx.r3.u32, w, h);
   ListSplit split;
@@ -589,6 +592,7 @@ REX_HOOK_RAW(bdRenderSubmitList) {
     __imp__bdRenderSubmitList(ctx, base);
     ctx = saved;
     ctx.r3.u32 = split.rest;
+    bdvr::GpuMarker("list 1A54 portraits");
     hud_pass(ctx);
     __imp__bdRenderSubmitList(ctx, base);
     ctx = saved;

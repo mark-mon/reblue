@@ -122,6 +122,7 @@ bool Begin() {
     g_frame_rt = rt;
     g_valid = false;
   }
+  bdvr::GpuMarker(g_first ? "vrhud begin (first)" : "vrhud begin");
   s.draw_framebuffer_bound = false;
   if (g_first)
     CopyOut(s, rt, g_tex[kWorld]);
@@ -140,6 +141,7 @@ void AfterBlack() {
   GuestTexture *rt = g_rt;
   if (!rt || Target(s) != rt)
     return;
+  bdvr::GpuMarker("vrhud after black");
   s.draw_framebuffer_bound = false;
   CopyOut(s, rt, g_tex[kBlack]);
   if (g_first)
@@ -155,6 +157,7 @@ void AfterWhite() {
   g_rt = nullptr;
   if (!rt || Target(s) != rt)
     return;
+  bdvr::GpuMarker("vrhud after white");
   s.draw_framebuffer_bound = false;
   CopyOut(s, rt, g_tex[kWhite]);
   // What the target held before this list: the normal drain draws it again for the window.
