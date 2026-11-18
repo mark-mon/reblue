@@ -813,6 +813,7 @@ void PollKeys() {
       std::fclose(f);
     }
     Log("F11: dump of the next headset images requested");
+    Log("%s", GpuMarkerReport().c_str());
   }
   down11 = k11;
   if (k8 && !down8) CycleMode();

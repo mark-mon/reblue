@@ -28,6 +28,7 @@ void LogDredReport(const char *) {}
 #include "core/logging.h"
 #include "gpu/device.h"
 #include "gpu/settings.h"
+#include "vr/bdvr.h"
 
 namespace bd::gpu {
 
@@ -293,6 +294,7 @@ void LogDredReport(const char *context) {
     BD_CRITICAL("[dred] page-fault output unavailable");
   }
 
+  BD_CRITICAL("[dred] {}", bdvr::GpuMarkerReport());
   BD_CRITICAL("[dred] ==== end ====");
   dred->Release();
 }

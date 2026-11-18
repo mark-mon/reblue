@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace plume {
 struct RenderDevice;
@@ -85,6 +86,8 @@ void NoteList(int index, uint32_t list, uint32_t draws);
 // Dev trace (frame after bdvr_dump.now): a structure mark with the draws since the previous mark.
 // A marker in the frame's GPU command list (named in the DRED report on a device loss).
 void GpuMarker(const char* what);
+// After a device loss: which marked stage was running (for re:Blue's DRED report).
+std::string GpuMarkerReport();
 void TraceMark(const char* what, uint32_t a = 0, uint32_t b = 0, uint32_t c = 0);
 
 // VR is re-aiming the world camera this frame (mono / stereo, a 3D scene).

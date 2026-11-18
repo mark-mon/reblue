@@ -13,9 +13,11 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -122,6 +124,48 @@ struct GlueState {
   std::atomic<uint64_t> frame_index{0};
 } g;
 
+// GPU stage markers. Each marker writes (frame, sequence, name id) into a CPU-readable buffer twice: MARKER_IN (all
+// earlier work has started) and MARKER_OUT (all earlier work has finished). After a device loss the two values say
+// which stage was running when the GPU hung; GpuMarkerReport decodes them with the names recorded on the CPU.
+namespace {
+struct Markers {
+  ID3D12Resource* buffer = nullptr;
+  const volatile uint32_t* mapped = nullptr;
+  D3D12_GPU_VIRTUAL_ADDRESS va = 0;
+  std::vector<std::string> names;                // id -> name
+  std::unordered_map<std::string, uint8_t> ids;  // name -> id
+  static constexpr uint32_t kFrames = 8, kPerFrame = 256;
+  uint8_t seq_ids[kFrames][kPerFrame] = {};      // per recorded frame: sequence -> name id
+  uint32_t seq_count[kFrames] = {};
+  uint32_t frame = 0, seq = 0;
+  ID3D12GraphicsCommandList* list = nullptr;
+  ID3D12GraphicsCommandList2* list2 = nullptr;
+} m;
+
+void CreateMarkerBuffer(RenderDevice* device) {
+  auto* dev = static_cast<D3D12Device*>(device)->d3d;
+  if (!dev) return;
+  D3D12_HEAP_PROPERTIES hp{D3D12_HEAP_TYPE_READBACK};
+  D3D12_RESOURCE_DESC rd{};
+  rd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  rd.Width = 256;
+  rd.Height = rd.DepthOrArraySize = rd.MipLevels = 1;
+  rd.SampleDesc.Count = 1;
+  rd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  if (FAILED(dev->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+                                          IID_PPV_ARGS(&m.buffer))))
+    return;
+  void* p = nullptr;
+  D3D12_RANGE r{0, 256};
+  if (FAILED(m.buffer->Map(0, &r, &p))) return;
+  std::memset(p, 0, 256);
+  m.mapped = static_cast<const volatile uint32_t*>(p);
+  m.va = m.buffer->GetGPUVirtualAddress();
+  m.names.push_back("(none)");
+}
+}  // namespace
+
+
 bool StereoActive() { return RequestedMode() == Mode::Stereo && ClipActive(); }
 
 std::atomic<uint64_t> g_trace_frame{~0ull};
@@ -195,6 +239,7 @@ int PacingFps() {
 
 void InitFromPlume(RenderDevice* device, RenderCommandQueue* queue) {
   g.device = device;
+  CreateMarkerBuffer(device);
   // VrEye must always be bound (every camera shader reads it): zeros unless stereo flips it.
   g.zero_buffer = device->createBuffer(RenderBufferDesc::UploadBuffer(256, RenderBufferFlag::CONSTANT));
   if (g.zero_buffer) {
@@ -233,6 +278,8 @@ bool RenderSize(uint32_t* width, uint32_t* height) {
 RenderCommandList* WrapCommands(RenderCommandList* list) {
   ++g.lists_this_frame;
   g.current = list;
+  ++m.frame;
+  m.seq = 0;
   g.stereo_frame = StereoActive() && g.eye_buffer != nullptr;
   if (!g.stereo_frame) return list;
   g.proxy.Open(list);
@@ -241,13 +288,61 @@ RenderCommandList* WrapCommands(RenderCommandList* list) {
 
 void GpuMarker(const char* what) {
   auto* list = static_cast<D3D12CommandList*>(g.current);
-  if (list == nullptr || list->d3d == nullptr || what == nullptr) return;
-  // Shows in the DRED report re:Blue logs when the device is lost (breadcrumb contexts), and in PIX / RenderDoc.
-  wchar_t text[64];
-  size_t n = 0;
-  for (; what[n] && n + 1 < 64; ++n) text[n] = wchar_t(static_cast<unsigned char>(what[n]));
-  text[n] = 0;
-  list->d3d->SetMarker(0, text, UINT((n + 1) * sizeof(wchar_t)));
+  if (list == nullptr || list->d3d == nullptr || what == nullptr || !m.mapped) return;
+  if (list->d3d != m.list) {
+    if (m.list2) m.list2->Release();
+    m.list2 = nullptr;
+    m.list = list->d3d;
+    m.list->QueryInterface(IID_PPV_ARGS(&m.list2));
+  }
+  if (!m.list2) return;
+  uint8_t id = 0;
+  auto it = m.ids.find(what);
+  if (it != m.ids.end()) {
+    id = it->second;
+  } else if (m.names.size() < 255) {
+    id = uint8_t(m.names.size());
+    m.names.emplace_back(what);
+    m.ids.emplace(what, id);
+  }
+  const uint32_t f = m.frame % Markers::kFrames;
+  if (m.seq < Markers::kPerFrame) {
+    m.seq_ids[f][m.seq] = id;
+    m.seq_count[f] = m.seq + 1;
+  }
+  const uint32_t value = ((m.frame & 0xFFF) << 20) | ((m.seq & 0xFFF) << 8) | id;
+  ++m.seq;
+  D3D12_WRITEBUFFERIMMEDIATE_PARAMETER prm[2] = {{m.va + 0, value}, {m.va + 4, value}};
+  D3D12_WRITEBUFFERIMMEDIATE_MODE modes[2] = {D3D12_WRITEBUFFERIMMEDIATE_MODE_MARKER_IN,
+                                              D3D12_WRITEBUFFERIMMEDIATE_MODE_MARKER_OUT};
+  m.list2->WriteBufferImmediate(2, prm, modes);
+}
+
+std::string GpuMarkerReport() {
+  if (!m.mapped) return "VR GPU markers: none";
+  auto describe = [](uint32_t v) {
+    const uint32_t frame = v >> 20, seq = (v >> 8) & 0xFFF, id = v & 0xFF;
+    char buf[160];
+    std::snprintf(buf, sizeof(buf), "frame %u #%u '%s'", frame, seq,
+                  id < m.names.size() ? m.names[id].c_str() : "?");
+    return std::string(buf);
+  };
+  const uint32_t in = m.mapped[0], out = m.mapped[1];
+  std::string r = "VR GPU markers: all work before " + describe(out) + " finished; all work before " +
+                  describe(in) + " started.";
+  // The stages after the last finished marker, from the CPU record of that frame.
+  const uint32_t frame = out >> 20, seq = (out >> 8) & 0xFFF;
+  uint32_t slot = Markers::kFrames;
+  for (uint32_t f = 0; f < Markers::kFrames; ++f)
+    if (((m.frame - f) & 0xFFF) == frame) slot = (m.frame - f) % Markers::kFrames;
+  if (slot < Markers::kFrames) {
+    r += " Stages from there:";
+    for (uint32_t i = seq; i < m.seq_count[slot] && i < seq + 8; ++i) {
+      const uint8_t id = m.seq_ids[slot][i];
+      r += " [#" + std::to_string(i) + " " + (id < m.names.size() ? m.names[id] : "?") + "]";
+    }
+  }
+  return r;
 }
 
 void BindEye(RenderCommandList* list) {
@@ -256,6 +351,7 @@ void BindEye(RenderCommandList* list) {
 }
 
 void BeforeFrameSubmit(RenderCommandList* list, RenderTexture* image, uint32_t width, uint32_t height, float gamma) {
+  g.current = nullptr;  // the frame list is closed now: no markers until the next one opens
   Xr::Get().SetSourceGamma(gamma);
   if (!g.stereo_frame) return;
   const bool whole_frame = g.lists_this_frame == 1;
@@ -319,6 +415,7 @@ void ClipForDraw(const void*, float out[2][16]) {
 plume::RenderCommandList* WrapCommands(plume::RenderCommandList* list) { return list; }
 void BindEye(plume::RenderCommandList*) {}
 void GpuMarker(const char*) {}
+std::string GpuMarkerReport() { return {}; }
 void BeforeFrameSubmit(plume::RenderCommandList*, plume::RenderTexture*, uint32_t, uint32_t, float) {}
 void AfterFrameSubmit(plume::RenderTexture*, uint32_t, uint32_t, float, plume::RenderTexture*,
                       plume::RenderTexture*) {}
